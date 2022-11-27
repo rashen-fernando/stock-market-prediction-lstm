@@ -1,0 +1,170 @@
+split v1, p(" ")
+split v11, p("-")
+rename v11 date
+rename v12 time
+rename v111 year
+rename v112 month
+rename v113 day
+rename v1 date_time
+rename v2 open
+rename v3 high
+rename v4 low
+rename v5 close
+rename v6 volume
+drop if year<"2010"
+keep if time == "09:30:00" | time=="15:59:00" | time=="18:00:00"
+save stocks_2010_2022
+
+keep if time=="15:59:00" 
+gen str prev_day_close=""
+replace prev_day_close="up" if close[_n-1] > open[_n-1]
+replace prev_day_close="down" if close[_n-1] < open[_n-1]
+replace prev_day_close="same" if close[_n-1] == open[_n-1]
+keep year month day prev_day_close
+save prev_day_close
+
+use stocks_2010_2022, clear
+keep if time == "09:30:00" | time=="15:59:00" 
+gen str current_day_open=""
+replace current_day_open="above" if open > high[_n-1]
+replace current_day_open="below" if open < low[_n-1]
+replace current_day_open="inside" if open < high[_n-1] & open > low[_n-1]
+keep if time == "09:30:00" 
+keep year month day current_day_open
+save current_day_open
+
+use stocks_2010_2022, clear
+keep if time == "09:30:00" 
+gen str open_candle=""
+replace open_candle="up" if close > open
+replace open_candle="down" if close < open
+replace open_candle="same" if close == open
+keep year month day open_candle
+save open_candle
+
+use stocks_2010_2022, clear
+keep if time=="15:59:00" 
+gen str day_session_prev_day_close=""
+replace day_session_prev_day_close="above" if close > high[_n-1]
+replace day_session_prev_day_close="below" if close < low[_n-1]
+replace day_session_prev_day_close="inside" if close < high[_n-1] & close > low[_n-1]
+keep year month day day_session_prev_day_close
+save day_session_prev_day_close
+
+use stocks_2010_2022, clear
+keep if time == "09:30:00" | time=="15:59:00" 
+gen str day_session_close=""
+replace day_session_close="above" if close > high[_n-1]
+replace day_session_close="below" if close < low[_n-1]
+replace day_session_close="inside" if close < high[_n-1] & close > low[_n-1]
+keep if time=="15:59:00" 
+keep year month day day_session_close
+save day_session_close
+
+use stocks_2010_2022, clear
+keep if time > "17:59:00" | time < "09:30:00" | time=="15:59:00"
+gen id=_n
+drop if id<887
+save overnight_session
+keep if time=="15:59:00"
+egen newid=seq(), block(1)
+save overnight_session_a
+use overnight_session, clear
+drop if time=="15:59:00"
+save overnight_session_b
+append using overnight_session_a
+sort id
+save overnight_session_c
+carryforward newid, gen(id_filled)
+bysort id_filled: egen overnight_high=max(high)
+bysort id_filled: egen overnight_low=min(low)
+save overnight_session_d
+keep if time=="15:59:00"
+gen str overnight_session=""
+replace overnight_session="above" if overnight_high>=high & overnight_low>=low
+replace overnight_session="below" if overnight_low<=low & overnight_high<=high
+replace overnight_session="inside" if overnight_low>=low & overnight_high<=high
+replace overnight_session="both" if overnight_high>high & overnight_low<low
+save overnight_session_d, replace
+keep year month day overnight_session
+save overnight_session_final, replace
+
+use stocks_2010_2022, clear
+drop if time <"09:30:00" 
+drop if time >"15:59:00"
+gen id=_n
+drop if id<390
+save day_session_previous_close
+keep if time=="15:59:00"
+egen newid=seq(), block(1)
+save day_session_previous_close_a
+use day_session_previous_close, clear
+drop if time=="15:59:00"
+save day_session_previous_close_b
+append using day_session_previous_close_a
+sort id
+save day_session_previous_close_c
+carryforward newid, gen(id_filled)
+bysort id_filled: egen previous_high=max(high)
+bysort id_filled: egen previous_low=min(low)
+save day_session_previous_close_d
+keep if time=="15:59:00"
+gen str day_session_previous_close=""
+replace day_session_previous_close="above" if previous_high>=high & previous_low>=low
+replace day_session_previous_close="below" if previous_low<=low & previous_high<=high
+replace day_session_previous_close="inside" if previous_low>=low & previous_high<=high
+replace day_session_previous_close="both" if previous_high>high & previous_low<low
+save day_session_previous_close_d, replace
+keep year month day day_session_previous_close
+save day_session_previous_close_final, replace
+
+use stocks_2010_2022, clear
+drop if time <"09:30:00" 
+drop if time >"15:59:00"
+gen id=_n
+save day_session_open
+keep if time=="09:30:00"
+egen newid=seq(), block(1)
+save day_session_open_a
+use day_session_open, clear
+drop if time=="09:30:00"
+save day_session_open_b
+append using day_session_open_a
+sort id
+save day_session_open_c
+carryforward newid, gen(id_filled)
+bysort id_filled: egen open_high=max(high)
+bysort id_filled: egen open_low=min(low)
+save day_session_open_d
+keep if time=="09:30:00"
+gen str day_session_open=""
+replace day_session_open="above" if open_high>=high & open_low>=low
+replace day_session_open="below" if open_low<=low & open_high<=high
+replace day_session_open="inside" if open_low>=low & open_high<=high
+replace day_session_open="both" if open_high>high & open_low<low
+save day_session_open_d, replace
+keep year month day day_session_open
+save day_session_open_final, replace
+
+use prev_day_close, clear
+merge 1:1 year month day using current_day_open
+drop _merge
+merge 1:1 year month day using open_candle
+drop _merge
+merge 1:1 year month day using day_session_prev_day_close
+drop _merge
+merge 1:1 year month day using day_session_close
+drop _merge
+merge 1:1 year month day using overnight_session_final
+drop _merge
+merge 1:1 year month day using day_session_previous_close_final
+drop _merge 
+merge 1:1 year month day using day_session_open_final
+save final_data, replace
+
+drop if prev_day_close=="" | current_day_open =="" | open_candle =="" | ///
+day_session_prev_day_close =="" | day_session_close =="" | overnight_session =="" | ///
+day_session_previous_close =="" | day_session_open ==""
+
+save final_data_nomiss, replace
+
